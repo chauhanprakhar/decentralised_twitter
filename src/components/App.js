@@ -1,109 +1,91 @@
-import React, { Component } from 'react';
-import Web3 from 'web3';
-import Identicon from 'identicon.js';
-import './App.css';
-import SocialNetwork from '../abis/SocialNetwork.json'
-import Navbar from './Navbar'
-import Card from './Card'
+import React from "react";
+import Sidebar from "./Sidebar";
+import Feed from "./Feed";
+import Widgets from "./Widgets";
+import "./App.css";
+import { useState, useEffect } from "react";
 
-class App extends Component {
+function App() {
 
-  async componentWillMount() {
-    await this.loadWeb3()
-    await this.loadBlockchainData()
-  }
+  const [currentAccount, setCurrentAccount] = useState('');
+  const [correctNetwork, setCorrectNetwork] = useState(false);
 
-  async loadWeb3() {
-    if (window.ethereum) {
-      window.web3 = new Web3(window.ethereum)
-      await window.ethereum.enable()
-    }
-    else if (window.web3) {
-      window.web3 = new Web3(window.web3.currentProvider)
-    }
-    else {
-      window.alert('Non-Ethereum browser detected. You should consider trying MetaMask!')
-    }
-  }
+  // Calls Metamask to connect wallet on clicking Connect Wallet button
+  const connectWallet = async () => {
+    try {
+      const { ethereum } = window
 
-  async loadBlockchainData() {
-    const web3 = window.web3
-    // Load account
-    const accounts = await web3.eth.getAccounts()
-    this.setState({ account: accounts[0] })
-    // Network ID
-    const networkId = await web3.eth.net.getId()
-    const networkData = SocialNetwork.networks[networkId]
-    if(networkData) {
-      const socialNetwork = web3.eth.Contract(SocialNetwork.abi, networkData.address)
-      console.log(socialNetwork)
-      this.setState({ socialNetwork })
-      const postCount = await socialNetwork.methods.postCount().call()
-      this.setState({ postCount })
-      // Load Posts
-      for (var i = 1; i <= postCount; i++) {
-        const post = await socialNetwork.methods.posts(i).call()
-        this.setState({
-          posts: [...this.state.posts, post]
-        })
+      if (!ethereum) {
+        console.log('Metamask not detected')
+        return
       }
-      // Sort posts. Show highest tipped posts first
-      this.setState({
-        posts: this.state.posts.sort((a,b) => b.tipAmount - a.tipAmount )
-      })
-      this.setState({ loading: false})
+      let chainId = await ethereum.request({ method: 'eth_chainId'})
+      console.log('Connected to chain:' + chainId)
+
+      const rinkebyChainId = '0x4'
+
+      if (chainId !== rinkebyChainId) {
+        alert('You are not connected to the Rinkeby Testnet!')
+        return
+      }
+
+      const accounts = await ethereum.request({ method: 'eth_requestAccounts' })
+
+      console.log('Found account', accounts[0])
+      setCurrentAccount(accounts[0])
+    } catch (error) {
+      console.log('Error connecting to metamask', error)
+    }
+  }
+
+  // Checks if wallet is connected to the correct network
+  const checkCorrectNetwork = async () => {
+    const { ethereum } = window
+    let chainId = await ethereum.request({ method: 'eth_chainId' })
+    console.log('Connected to chain:' + chainId)
+
+    const rinkebyChainId = '0x4'
+
+    if (chainId !== rinkebyChainId) {
+      setCorrectNetwork(false)
     } else {
-      window.alert('SocialNetwork contract not deployed to detected network.')
+      setCorrectNetwork(true)
     }
   }
 
- 
+  // Similar to componentDidMount and componentDidUpdate:
+  useEffect(() => {
+    connectWallet();
+    checkCorrectNetwork();
+  });
 
-  createPost(content) {
-    this.setState({ loading: true })
-    this.state.socialNetwork.methods.createPost(content).send({ from: this.state.account })
-    .once('receipt', (receipt) => {
-      this.setState({ loading: false })
-    })
-  }
-
-  tipPost(id, tipAmount) {
-    this.setState({ loading: true })
-    this.state.socialNetwork.methods.tipPost(id).send({ from: this.state.account, value: tipAmount })
-    .once('receipt', (receipt) => {
-      this.setState({ loading: false })
-    })
-  }
-
-  constructor(props) {
-    super(props)
-    this.state = {
-      account: '',
-      socialNetwork: null,
-      postCount: 0,
-      posts: [],
-      loading: true
-    }
-
-    this.createPost = this.createPost.bind(this)
-    this.tipPost = this.tipPost.bind(this)
-  }
-
-  render() {
-    return (
-      <div>
-        <Navbar account={this.state.account} />
-        { this.state.loading
-          ? <div id="loader" className="text-center mt-5"><p>Loading...</p></div>
-          : <Card
-              posts={this.state.posts}
-              createPost={this.createPost}
-              tipPost={this.tipPost}
-            />
-        }
+  return (
+    // BEM
+    <div>
+    {currentAccount === '' ? (
+      <button
+      className='text-2xl font-bold py-3 px-12 bg-[#f1c232] rounded-lg mb-10 hover:scale-105 transition duration-500 ease-in-out'
+      onClick={connectWallet}
+      >
+      Connect Wallet
+      </button>
+      ) : correctNetwork ? (
+        <div className="app">
+          <Sidebar />
+          <Feed />
+          <Widgets />
+        </div>
+      ) : (
+      <div className='flex flex-col justify-center items-center mb-20 font-bold text-2xl gap-y-3'>
+      <div>----------------------------------------</div>
+      <div>Please connect to the Rinkeby Testnet</div>
+      <div>and reload the page</div>
+      <div>----------------------------------------</div>
       </div>
-    );
-  }
+    )}
+    </div>
+
+  );
 }
 
 export default App;
